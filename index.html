@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShuffleFix — True Spotify Shuffle</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lucide-static@0.460.0/font/lucide.css">
+  <style>
+    :root {
+      --bg: #0B0F19;
+      --accent: #00E676;
+      --accent-glow: rgba(0, 230, 118, 0.35);
+      --text: #FFFFFF;
+      --muted: #94A3B8;
+      --card: #111827;
+      --border: #1F2937;
+      --radius: 16px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    .logo-svg { width: 48px; height: 48px; }
+    .view { display: none; min-height: 100vh; }
+    .view.active { display: flex; }
+
+    #login-view { align-items: center; justify-content: center; padding: 2rem; }
+    .login-container { text-align: center; max-width: 520px; }
+    .login-container .logo-wrapper { margin-bottom: 2rem; }
+    h1 { font-size: clamp(1.75rem, 5vw, 2.75rem); font-weight: 700; letter-spacing: -0.5px; margin-bottom: 1rem; line-height: 1.15; }
+    .subheadline { color: var(--muted); font-size: 1.05rem; line-height: 1.6; margin-bottom: 2.5rem; }
+    .connect-btn {
+      background: var(--accent); color: #0B0F19; border: none; padding: 1.1rem 2.5rem;
+      font-size: 1.15rem; font-weight: 700; border-radius: 999px; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 0.75rem;
+      box-shadow: 0 0 40px var(--accent-glow); transition: all 0.2s ease;
+    }
+    .connect-btn:hover { transform: scale(1.04); box-shadow: 0 0 60px var(--accent-glow); }
+    .connect-btn:active { transform: scale(0.98); }
+
+    #dashboard-view { flex-direction: column; }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.25rem 2rem; border-bottom: 1px solid var(--border);
+      background: rgba(11, 15, 25, 0.85); backdrop-filter: blur(12px);
+      position: sticky; top: 0; z-index: 20;
+    }
+    .header-left { display: flex; align-items: center; gap: 0.75rem; font-weight: 700; font-size: 1.25rem; }
+    .profile { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.95rem; }
+    .status-dot { width: 8px; height: 8px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 12px var(--accent); }
+    .back-btn { background: none; border: none; color: var(--text); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-size: 1rem; padding: 0.25rem; }
+
+    .content { flex: 1; padding: 1.5rem 1.25rem 8rem; position: relative; }
+
+    .playlist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .playlist-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      overflow: hidden; cursor: pointer; transition: all 0.2s ease; aspect-ratio: 1; position: relative;
+    }
+    .playlist-card:hover, .playlist-card:active { border-color: var(--accent); transform: scale(0.98); }
+    .playlist-cover { height: 65%; width: 100%; background: linear-gradient(135deg, #1f2937, #374151); }
+    .playlist-meta { padding: 0.75rem; }
+    .playlist-meta h3 { font-size: 0.95rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .playlist-meta span { color: var(--muted); font-size: 0.8rem; }
+    .forced-badge {
+      position: absolute; top: 8px; right: 8px; background: rgba(0,230,118,0.15);
+      color: var(--accent); font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.5rem;
+      border-radius: 999px; border: 1px solid rgba(0,230,118,0.4);
+    }
+
+    .empty-state {
+      grid-column: 1 / -1; text-align: center; color: var(--muted); padding: 4rem 1rem;
+      font-size: 0.95rem;
+    }
+
+    .song-list-view { display: none; }
+    .song-list-view.active { display: block; }
+    .song-list { display: flex; flex-direction: column; gap: 0.5rem; max-height: calc(100vh - 220px); overflow-y: auto; }
+    .song-item {
+      display: flex; align-items: center; gap: 1rem; padding: 0.85rem 1rem;
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    }
+    .song-num { color: var(--muted); width: 24px; text-align: center; font-size: 0.9rem; }
+    .song-info h4 { font-size: 0.95rem; font-weight: 500; }
+    .song-info span { color: var(--muted); font-size: 0.8rem; }
+
+    .vibe-row { display: none; gap: 0.5rem; margin-bottom: 1.25rem; overflow-x: auto; padding-bottom: 0.25rem; }
+    .vibe-row.visible { display: flex; }
+    .vibe-btn {
+      flex: 1; min-width: 100px; background: var(--card); border: 1px solid var(--border);
+      color: var(--muted); border-radius: 999px; padding: 0.65rem 0.75rem;
+      font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .vibe-btn.active, .vibe-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,230,118,0.08); }
+    .vibe-btn:active { transform: scale(0.96); }
+
+    .floating-actions {
+      position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+      display: none; gap: 0.75rem; background: rgba(17, 24, 39, 0.92);
+      backdrop-filter: blur(16px); border: 1px solid var(--border);
+      padding: 0.75rem 1rem; border-radius: 999px; z-index: 30;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+    }
+    .floating-actions.visible { display: flex; }
+    .word-btn {
+      background: #0f172a; border: 1px solid var(--border); color: var(--text);
+      padding: 0.75rem 1.25rem; border-radius: 999px; font-size: 0.85rem;
+      font-weight: 600; cursor: pointer; transition: all 0.2s ease; white-space: nowrap;
+    }
+    .word-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(0, 230, 118, 0.1); }
+    .word-btn:active { transform: scale(0.96); }
+
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; }
+    .modal-overlay.show { display: flex; }
+    .modal { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 0.5rem; min-width: 240px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+    .modal-item { padding: 0.9rem 1.25rem; border-radius: 10px; cursor: pointer; display: flex; align-items: center; gap: 0.75rem; font-size: 0.95rem; }
+    .modal-item:hover { background: #1f2937; }
+    .modal-item.delete { color: #f87171; }
+
+    .legal-links { text-align: center; margin-top: 1.5rem; color: var(--muted); font-size: 0.75rem; }
+    .legal-links span { cursor: pointer; }
+    .legal-links span:hover { color: var(--accent); }
+    .legal-modal-content { max-width: 420px; max-height: 70vh; overflow-y: auto; padding: 1.25rem; font-size: 0.85rem; line-height: 1.5; color: var(--muted); }
+    .legal-modal-content h3 { color: var(--text); margin-bottom: 0.75rem; font-size: 1rem; }
+
+    .toast {
+      position: fixed; bottom: 7.5rem; left: 50%; transform: translateX(-50%);
+      background: #111827; border: 1px solid var(--accent); color: var(--text);
+      padding: 0.9rem 1.25rem; border-radius: 12px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+      display: none; align-items: center; gap: 0.75rem; z-index: 200; white-space: nowrap; max-width: 90vw;
+    }
+    .toast.show { display: flex; }
+
+    @media (max-width: 480px) {
+      .playlist-grid { gap: 0.75rem; }
+      .playlist-meta h3 { font-size: 0.85rem; }
+      .vibe-btn { font-size: 0.72rem; padding: 0.6rem 0.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- LOGIN -->
+  <div id="login-view" class="view active">
+    <div class="login-container">
+      <div class="logo-wrapper">
+        <svg class="logo-svg" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+          <g transform="translate(0,512) scale(0.1,-0.1)" fill="#00E676">
+            <path d="M3935 4784 c-91 -47 -95 -63 -95 -369 l0 -255 -162 0 c-90 0 -203 -5 -253 -11 -296 -36 -544 -156 -751 -363 -105 -105 -250 -307 -237 -329 3 -7 81 -131 171 -277 91 -146 171 -275 179 -288 8 -12 18 -20 22 -18 5 3 62 92 127 198 138 224 215 310 332 371 116 61 197 77 399 77 l173 0 0 -254 c0 -284 4 -305 65 -352 45 -34 107 -41 157 -17 62 29 1024 839 1038 874 16 38 16 100 0 139 -9 21 -166 158 -507 443 -271 226 -508 420 -526 430 -39 21 -92 22 -132 1z m356 -527 c132 -65 353 -261 395 -351 29 -63 29 -69 0 -131 -42 -91 -261 -285 -400 -355 -63 -32 -131 -39 -181 -20 -15 6 -81 63 -148 128 -133 127 -199 176 -311 227 -80 38 -99 54 -90 79 3 9 52 43 108 77 124 75 206 141 314 253 45 48 97 96 115 107 44 28 125 22 198 -14z"/>
+            <path d="M0 3840 l0 -320 493 0 c455 0 500 -2 569 -19 141 -36 279 -126 354 -231 19 -27 274 -431 565 -897 292 -466 555 -881 586 -920 111 -147 291 -292 454 -367 196 -90 321 -116 602 -123 l217 -6 0 -252 c0 -282 4 -304 65 -350 42 -32 97 -41 147 -23 53 19 1032 840 1048 879 16 38 16 100 0 139 -9 21 -166 158 -507 443 -271 226 -508 420 -526 430 -45 26 -115 18 -162 -17 -61 -47 -65 -68 -65 -352 l0 -254 -173 0 c-200 0 -283 16 -395 75 -79 41 -170 119 -213 181 -16 24 -268 425 -560 891 -292 467 -555 880 -585 919 -155 204 -394 367 -642 440 -166 48 -247 54 -779 54 l-493 0 0 -320z m4286 -2140 c76 -38 216 -144 298 -225 159 -156 160 -232 4 -386 -143 -142 -307 -250 -401 -266 -56 -9 -117 27 -200 119 -100 111 -194 188 -318 264 -59 35 -110 71 -113 80 -10 25 12 43 91 80 111 50 177 99 304 221 63 62 129 119 145 128 48 25 122 19 190 -15z"/>
+            <path d="M1629 2185 c-25 -39 -80 -128 -124 -200 -131 -214 -257 -318 -441 -365 -72 -19 -111 -20 -571 -20 l-493 0 0 -321 0 -320 537 4 c512 4 543 5 638 26 336 75 608 263 803 555 56 83 70 111 63 124 -17 31 -339 547 -354 567 -14 18 -17 16 -58 -50z"/>
+          </g>
+        </svg>
+      </div>
+      <h1>Fix Spotify's Broken Shuffle with 1-Click.</h1>
+      <p class="subheadline">A privacy-first edge utility that delivers 100% true mathematical randomness back to your music library.</p>
+      <button id="connect-btn" class="connect-btn">
+        <i data-lucide="music"></i> Connect Spotify
+      </button>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard-view" class="view">
+    <header>
+      <div class="header-left" id="header-title">
+        <svg class="logo-svg" style="width:36px;height:36px" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+          <g transform="translate(0,512) scale(0.1,-0.1)" fill="#00E676">
+            <path d="M3935 4784 c-91 -47 -95 -63 -95 -369 l0 -255 -162 0 c-90 0 -203 -5 -253 -11 -296 -36 -544 -156 -751 -363 -105 -105 -250 -307 -237 -329 3 -7 81 -131 171 -277 91 -146 171 -275 179 -288 8 -12 18 -20 22 -18 5 3 62 92 127 198 138 224 215 310 332 371 116 61 197 77 399 77 l173 0 0 -254 c0 -284 4 -305 65 -352 45 -34 107 -41 157 -17 62 29 1024 839 1038 874 16 38 16 100 0 139 -9 21 -166 158 -507 443 -271 226 -508 420 -526 430 -39 21 -92 22 -132 1z m356 -527 c132 -65 353 -261 395 -351 29 -63 29 -69 0 -131 -42 -91 -261 -285 -400 -355 -63 -32 -131 -39 -181 -20 -15 6 -81 63 -148 128 -133 127 -199 176 -311 227 -80 38 -99 54 -90 79 3 9 52 43 108 77 124 75 206 141 314 253 45 48 97 96 115 107 44 28 125 22 198 -14z"/>
+            <path d="M0 3840 l0 -320 493 0 c455 0 500 -2 569 -19 141 -36 279 -126 354 -231 19 -27 274 -431 565 -897 292 -466 555 -881 586 -920 111 -147 291 -292 454 -367 196 -90 321 -116 602 -123 l217 -6 0 -252 c0 -282 4 -304 65 -350 42 -32 97 -41 147 -23 53 19 1032 840 1048 879 16 38 16 100 0 139 -9 21 -166 158 -507 443 -271 226 -508 420 -526 430 -45 26 -115 18 -162 -17 -61 -47 -65 -68 -65 -352 l0 -254 -173 0 c-200 0 -283 16 -395 75 -79 41 -170 119 -213 181 -16 24 -268 425 -560 891 -292 467 -555 880 -585 919 -155 204 -394 367 -642 440 -166 48 -247 54 -779 54 l-493 0 0 -320z m4286 -2140 c76 -38 216 -144 298 -225 159 -156 160 -232 4 -386 -143 -142 -307 -250 -401 -266 -56 -9 -117 27 -200 119 -100 111 -194 188 -318 264 -59 35 -110 71 -113 80 -10 25 12 43 91 80 111 50 177 99 304 221 63 62 129 119 145 128 48 25 122 19 190 -15z"/>
+            <path d="M1629 2185 c-25 -39 -80 -128 -124 -200 -131 -214 -257 -318 -441 -365 -72 -19 -111 -20 -571 -20 l-493 0 0 -321 0 -320 537 4 c512 4 543 5 638 26 336 75 608 263 803 555 56 83 70 111 63 124 -17 31 -339 547 -354 567 -14 18 -17 16 -58 -50z"/>
+          </g>
+        </svg>
+        <span>ShuffleFix</span>
+      </div>
+      <div class="profile">
+        <div class="status-dot"></div> Connected
+      </div>
+    </header>
+
+    <div class="content">
+      <div id="playlist-grid" class="playlist-grid">
+        <div class="empty-state">No playlists loaded yet.<br>Connect Spotify to access your library.</div>
+      </div>
+      <div class="legal-links">
+        <span id="tos-link">Terms of Service</span>
+        <span>·</span>
+        <span id="privacy-link">Privacy Policy</span>
+      </div>
+
+      <div id="song-list-view" class="song-list-view">
+        <div class="vibe-row" id="vibe-row">
+          <button class="vibe-btn" data-vibe="all">All</button>
+          <button class="vibe-btn" data-vibe="upbeat">Upbeat/Gym</button>
+          <button class="vibe-btn" data-vibe="chill">Chill/Acoustic</button>
+          <button class="vibe-btn" data-vibe="focus">Deep Focus</button>
+        </div>
+        <div id="song-list" class="song-list"></div>
+      </div>
+    </div>
+
+    <div class="floating-actions" id="floating-actions">
+      <button class="word-btn" data-action="true-shuffle">True Shuffle</button>
+      <button class="word-btn" data-action="unloop">Unloop songs</button>
+    </div>
+  </div>
+
+  <!-- Long-press Modal -->
+  <div id="modal-overlay" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-item" id="modal-clone"><i data-lucide="copy"></i> Clone & Shuffle Playlist</div>
+      <div class="modal-item" id="modal-dedupe"><i data-lucide="eraser"></i> Delete duplicated songs</div>
+      <div class="modal-item delete" id="modal-delete"><i data-lucide="trash-2"></i> Delete Playlist</div>
+    </div>
+  </div>
+
+  <!-- Legal Modals -->
+  <div id="tos-modal" class="modal-overlay">
+    <div class="modal">
+      <div class="legal-modal-content">
+        <h3>Terms of Service</h3>
+        <p>ShuffleFix is a privacy-first client-side utility. By using this tool you agree that shuffle and filter operations run in memory on a stateless edge server and are not stored. You are responsible for complying with Spotify’s terms when using connected accounts. This tool is provided as-is without warranty.</p>
+      </div>
+    </div>
+  </div>
+  <div id="privacy-modal" class="modal-overlay">
+    <div class="modal">
+      <div class="legal-modal-content">
+        <h3>Privacy Policy</h3>
+        <p>We do not collect, store, or transmit your Spotify library, playlists, or listening history. Processing (Fisher-Yates shuffle, vibe filtering, duplicate removal) happens in memory on a stateless edge server and is discarded after each request. We use no database and store no playlists or listening history. Your sign-in tokens are kept only in your own browser.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast" class="toast">
+    <i data-lucide="check-circle"></i>
+    <span>Success! Full library loaded and vibe-filtered. Open your Spotify app now.</span>
+  </div>
+
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script>
+    // ============================================================
+    // CONFIG — set these two things
+    // ============================================================
+    // 1) Your deployed Worker URL (no trailing slash)
+    const API_BASE = "https://shufflefix.nenjifokoto.workers.dev";
+    // 2) Redirect URI = this page's URL. It must be added EXACTLY like this
+    //    in the Spotify Developer Dashboard (Settings > Redirect URIs).
+    const REDIRECT_URI = location.origin + location.pathname;
+
+    const SPOTIFY = "https://api.spotify.com/v1";
+    const COLORS = ["#6366F1", "#F59E0B", "#8B5CF6", "#EC4899", "#14B8A6", "#EF4444", "#3B82F6"];
+
+    // ============================================================
+    // Helpers
+    // ============================================================
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    function b64url(buf) {
+      let s = "";
+      new Uint8Array(buf).forEach((b) => (s += String.fromCharCode(b)));
+      return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    }
+    function rand(len) {
+      const a = new Uint8Array(len);
+      crypto.getRandomValues(a);
+      return b64url(a).slice(0, len);
+    }
+    async function sha256(str) {
+      return crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+    }
+
+    const store = {
+      get() { try { return JSON.parse(localStorage.getItem("sf_tokens") || "null"); } catch { return null; } },
+      set(t) { localStorage.setItem("sf_tokens", JSON.stringify(t)); },
+      clear() { localStorage.removeItem("sf_tokens"); }
+    };
+
+    // ============================================================
+    // State & DOM
+    // ============================================================
+    let playlists = [];
+    let currentPlaylist = null;
+    let currentTracks = [];
+    let activeVibe = null;
+    let longPressTimer = null;
+    let longPressFired = false;
+    let longPressTarget = null;
+    let busy = false;
+    let toastTimer = null;
+
+    const loginView = document.getElementById("login-view");
+    const dashboardView = document.getElementById("dashboard-view");
+    const connectBtn = document.getElementById("connect-btn");
+    const playlistGrid = document.getElementById("playlist-grid");
+    const songListView = document.getElementById("song-list-view");
+    const songList = document.getElementById("song-list");
+    const vibeRow = document.getElementById("vibe-row");
+    const headerTitle = document.getElementById("header-title");
+    const modalOverlay = document.getElementById("modal-overlay");
+    const floatingActions = document.getElementById("floating-actions");
+    const toast = document.getElementById("toast");
+    const HEADER_HTML = headerTitle.innerHTML;
+
+    function initIcons() { if (window.lucide) lucide.createIcons(); }
+
+    function showToast(msg, ms = 4500) {
+      toast.querySelector("span").textContent = msg;
+      toast.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove("show"), ms);
+    }
+
+    // ============================================================
+    // Auth (PKCE via your Worker)
+    // ============================================================
+    async function workerFetch(path, opts = {}) {
+      let res;
+      try {
+        res = await fetch(API_BASE + path, opts);
+      } catch {
+        throw new Error("Can't reach the ShuffleFix server. Check API_BASE in index.html.");
+      }
+      return res.json().catch(() => ({ ok: false, message: "Bad response from server." }));
+    }
+
+    async function login() {
+      if (API_BASE.includes("YOUR-WORKER")) {
+        throw new Error("Set API_BASE in index.html to your Worker URL first.");
+      }
+      const verifier = rand(64);
+      const state = rand(16);
+      const challenge = b64url(await sha256(verifier));
+      sessionStorage.setItem("sf_verifier", verifier);
+      sessionStorage.setItem("sf_state", state);
+
+      const q = new URLSearchParams({ code_challenge: challenge, state, redirect_uri: REDIRECT_URI });
+      const data = await workerFetch("/api/login?" + q.toString());
+      if (!data.ok || !data.url) throw new Error(data.message || "Could not start Spotify login.");
+      location.href = data.url;
+    }
+
+    async function finishLogin(params) {
+      const code = params.get("code");
+      const state = params.get("state");
+      const verifier = sessionStorage.getItem("sf_verifier");
+      const savedState = sessionStorage.getItem("sf_state");
+      history.replaceState({}, "", REDIRECT_URI); // clean the URL
+      sessionStorage.removeItem("sf_verifier");
+      sessionStorage.removeItem("sf_state");
+
+      if (!verifier || !savedState || state !== savedState) {
+        throw new Error("Login session mismatch. Please click Connect Spotify again.");
+      }
+      const data = await workerFetch("/api/callback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, code_verifier: verifier, redirect_uri: REDIRECT_URI })
+      });
+      if (!data.ok) throw new Error(data.message || "Spotify login failed.");
+      store.set({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_at: Date.now() + (data.expires_in || 3600) * 1000
+      });
+    }
+
+    async function getAccessToken() {
+      const t = store.get();
+      if (!t) throw new Error("Not connected.");
+      if (Date.now() < t.expires_at - 60000) return t.access_token;
+      if (!t.refresh_token) { logout(); throw new Error("Session expired. Please reconnect."); }
+      const data = await workerFetch("/api/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: t.refresh_token })
+      });
+      if (!data.ok) { logout(); throw new Error("Session expired. Please reconnect."); }
+      const nt = {
+        access_token: data.access_token,
+        refresh_token: data.refresh_token || t.refresh_token,
+        expires_at: Date.now() + (data.expires_in || 3600) * 1000
+      };
+      store.set(nt);
+      return nt.access_token;
+    }
+
+    function logout() {
+      store.clear();
+      dashboardView.classList.remove("active");
+      loginView.classList.add("active");
+      connectBtn.disabled = false;
+    }
+
+    // ============================================================
+    // Spotify reads (browser -> Spotify directly, just for display)
+    // ============================================================
+    async function spotifyGet(path) {
+      const token = await getAccessToken();
+      const res = await fetch(path.startsWith("http") ? path : SPOTIFY + path, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.status === 401) { logout(); throw new Error("Session expired. Please reconnect."); }
+      if (res.status === 429) {
+        const s = res.headers.get("Retry-After") || "a few";
+        throw new Error(`Spotify is busy. Try again in ${s}s.`);
+      }
+      if (!res.ok) throw new Error(`Spotify error (${res.status}).`);
+      return res.json();
+    }
+
+    async function loadPlaylists() {
+      const list = [];
+      let url = "/me/playlists?limit=50";
+      let guard = 0;
+      while (url && guard++ < 10) {
+        const d = await spotifyGet(url);
+        list.push(...(d.items || []));
+        url = d.next || null;
+      }
+      let likedTotal = "?";
+      try { likedTotal = (await spotifyGet("/me/tracks?limit=1")).total; } catch { /* non-fatal */ }
+
+      playlists = [
+        { id: "liked", name: "Liked Songs", tracks: likedTotal, color: "#1DB954", image: null, full: true },
+        ...list.filter(Boolean).map((p, i) => ({
+          id: p.id,
+          name: p.name || "Untitled",
+          tracks: p.tracks?.total ?? p.items?.total ?? "?",
+          color: COLORS[i % COLORS.length],
+          image: (p.images && p.images[0] && p.images[0].url) || null,
+          full: false
+        }))
+      ];
+    }
+
+    async function loadPreview(id) {
+      let d;
+      if (id === "liked") {
+        d = await spotifyGet("/me/tracks?limit=50");
+      } else {
+        try { d = await spotifyGet(`/playlists/${id}/items?limit=50`); }
+        catch { d = await spotifyGet(`/playlists/${id}/tracks?limit=50`); }
+      }
+      return (d.items || [])
+        .map((it) => it && (it.track || it.item))
+        .filter((t) => t && t.name)
+        .map((t) => ({ title: t.name, artist: (t.artists && t.artists[0] && t.artists[0].name) || "" }));
+    }
+
+    // ============================================================
+    // Worker actions
+    // ============================================================
+    function friendly(data) {
+      if (data.error === "RATE_LIMITED") return `Spotify is busy. Try again in ${data.retryAfter || 5}s.`;
+      if (data.error === "NO_ACTIVE_DEVICE") return "Open Spotify and start playing on a device, then try again.";
+      if (data.error === "PREMIUM_REQUIRED") return "Spotify Premium is required to control playback.";
+      return data.message || "Something went wrong.";
+    }
+
+    async function runAction(action, extra = {}) {
+      const token = await getAccessToken();
+      const data = await workerFetch("/api/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action, ...extra })
+      });
+      if (!data.ok) {
+        if (data.error === "TOKEN_EXPIRED") logout();
+        throw new Error(friendly(data));
+      }
+      return data;
+    }
+
+    async function guarded(label, fn) {
+      if (busy) return;
+      busy = true;
+      showToast(label, 60000);
+      try { await fn(); }
+      catch (e) { showToast(e.message || "Something went wrong."); }
+      finally { busy = false; }
+    }
+
+    // ============================================================
+    // UI
+    // ============================================================
+    function renderPlaylistGrid() {
+      if (!playlists.length) {
+        playlistGrid.innerHTML = `<div class="empty-state">No playlists found.</div>`;
+        return;
+      }
+      playlistGrid.innerHTML = playlists.map((p) => `
+        <div class="playlist-card" data-id="${esc(p.id)}">
+          ${p.full ? '<div class="forced-badge">All Tracks Forced</div>' : ""}
+          <div class="playlist-cover" style="background: ${p.image ? `url('${esc(p.image)}') center/cover` : `linear-gradient(135deg, ${p.color}55, ${p.color}aa)`}"></div>
+          <div class="playlist-meta">
+            <h3>${esc(p.name)}</h3>
+            <span>${esc(p.tracks)} tracks</span>
+          </div>
+        </div>
+      `).join("");
+
+      document.querySelectorAll(".playlist-card").forEach((card) => {
+        const id = card.dataset.id;
+        card.addEventListener("click", () => {
+          if (longPressFired) { longPressFired = false; return; }
+          openPlaylist(id);
+        });
+        card.addEventListener("mousedown", () => startLongPress(id));
+        card.addEventListener("mouseup", cancelLongPress);
+        card.addEventListener("mouseleave", cancelLongPress);
+        card.addEventListener("touchstart", () => startLongPress(id), { passive: true });
+        card.addEventListener("touchend", cancelLongPress);
+        card.addEventListener("touchmove", cancelLongPress);
+      });
+    }
+
+    function startLongPress(id) {
+      longPressTarget = id;
+      longPressFired = false;
+      longPressTimer = setTimeout(() => { longPressFired = true; longPressTimer = null; openModal(id); }, 600);
+    }
+    function cancelLongPress() { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } }
+
+    async function openPlaylist(id) {
+      currentPlaylist = playlists.find((p) => p.id === id);
+      if (!currentPlaylist) return;
+      playlistGrid.style.display = "none";
+      document.querySelector(".legal-links").style.display = "none";
+      songListView.classList.add("active");
+      vibeRow.classList.add("visible");
+      floatingActions.classList.add("visible");
+
+      headerTitle.innerHTML = `
+        <button class="back-btn" id="back-btn"><i data-lucide="chevron-left"></i></button>
+        <span>${esc(currentPlaylist.name)}</span>
+      `;
+      document.getElementById("back-btn").addEventListener("click", closePlaylist);
+      initIcons();
+
+      songList.innerHTML = "";
+      try {
+        currentTracks = await loadPreview(id);
+        renderSongs(currentTracks);
+      } catch (e) {
+        showToast(e.message);
+      }
+    }
+
+    function closePlaylist() {
+      currentPlaylist = null;
+      currentTracks = [];
+      activeVibe = null;
+      songListView.classList.remove("active");
+      vibeRow.classList.remove("visible");
+      floatingActions.classList.remove("visible");
+      playlistGrid.style.display = "grid";
+      document.querySelector(".legal-links").style.display = "block";
+      document.querySelectorAll(".vibe-btn").forEach((b) => b.classList.remove("active"));
+      headerTitle.innerHTML = HEADER_HTML;
+      initIcons();
+    }
+
+    function renderSongs(tracks) {
+      songList.innerHTML = tracks.slice(0, 50).map((s, i) => `
+        <div class="song-item">
+          <div class="song-num">${i + 1}</div>
+          <div class="song-info">
+            <h4>${esc(s.title)}</h4>
+            <span>${esc(s.artist)}</span>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function openModal(id) { longPressTarget = id; modalOverlay.classList.add("show"); initIcons(); }
+    function closeModal() { modalOverlay.classList.remove("show"); }
+    modalOverlay.addEventListener("click", (e) => { if (e.target === modalOverlay) closeModal(); });
+
+    // Vibe toggles (the Worker applies the real filter when you press an action button)
+    document.querySelectorAll(".vibe-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".vibe-btn").forEach((b) => b.classList.remove("active"));
+        if (activeVibe === btn.dataset.vibe) {
+          activeVibe = null;
+        } else {
+          activeVibe = btn.dataset.vibe;
+          btn.classList.add("active");
+        }
+      });
+    });
+
+    // True Shuffle / Unloop
+    document.querySelectorAll(".word-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (!currentPlaylist) return;
+        const action = btn.dataset.action;
+        guarded("Loading your full library and shuffling…", async () => {
+          const r = await runAction(action, { playlistId: currentPlaylist.id, vibe: activeVibe || "all" });
+          showToast(r.message || "Done! Open your Spotify app now.");
+        });
+      });
+    });
+
+    // Long-press menu actions
+    document.getElementById("modal-clone").addEventListener("click", () => {
+      const p = playlists.find((x) => x.id === longPressTarget);
+      closeModal();
+      if (!p) return;
+      guarded(`Cloning ${p.name}…`, async () => {
+        const r = await runAction("clone", { playlistId: p.id, playlistName: p.name });
+        showToast(r.message || `Cloned & shuffled: ${p.name}`);
+        await loadPlaylists();
+        renderPlaylistGrid();
+      });
+    });
+
+    document.getElementById("modal-dedupe").addEventListener("click", () => {
+      const p = playlists.find((x) => x.id === longPressTarget);
+      closeModal();
+      if (!p) return;
+      guarded(`Scanning ${p.name} for duplicates…`, async () => {
+        const r = await runAction("dedupe", { playlistId: p.id });
+        showToast(r.message || `Removed duplicates from: ${p.name}`);
+      });
+    });
+
+    document.getElementById("modal-delete").addEventListener("click", () => {
+      const p = playlists.find((x) => x.id === longPressTarget);
+      closeModal();
+      if (!p) return;
+      if (!confirm(`Delete "${p.name}" from your library?`)) return;
+      guarded(`Deleting ${p.name}…`, async () => {
+        await runAction("delete", { playlistId: p.id, confirm: true });
+        playlists = playlists.filter((x) => x.id !== p.id);
+        renderPlaylistGrid();
+        showToast(`Deleted: ${p.name}`);
+      });
+    });
+
+    // Legal modals
+    document.getElementById("tos-link").addEventListener("click", () => document.getElementById("tos-modal").classList.add("show"));
+    document.getElementById("privacy-link").addEventListener("click", () => document.getElementById("privacy-modal").classList.add("show"));
+    document.getElementById("tos-modal").addEventListener("click", (e) => { if (e.target.id === "tos-modal") e.target.classList.remove("show"); });
+    document.getElementById("privacy-modal").addEventListener("click", (e) => { if (e.target.id === "privacy-modal") e.target.classList.remove("show"); });
+
+    // ============================================================
+    // Connect button + startup
+    // ============================================================
+    connectBtn.addEventListener("click", async () => {
+      connectBtn.disabled = true;
+      try {
+        await login(); // redirects to Spotify
+      } catch (e) {
+        showToast(e.message);
+        connectBtn.disabled = false;
+      }
+    });
+
+    async function enterDashboard() {
+      loginView.classList.remove("active");
+      dashboardView.classList.add("active");
+      try {
+        await loadPlaylists();
+      } catch (e) {
+        showToast(e.message);
+      }
+      renderPlaylistGrid();
+      initIcons();
+    }
+
+    (async function init() {
+      initIcons();
+      const params = new URLSearchParams(location.search);
+      try {
+        if (params.get("error")) {
+          history.replaceState({}, "", REDIRECT_URI);
+          showToast("Spotify login was cancelled.");
+        } else if (params.get("code")) {
+          await finishLogin(params);
+        }
+      } catch (e) {
+        showToast(e.message);
+      }
+      if (store.get()) await enterDashboard();
+    })();
+  </script>
+</body>
+</html>
